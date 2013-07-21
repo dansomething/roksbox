@@ -1,7 +1,19 @@
 <?php
-$tree=array();
+//----------------------------------------------------------------------
+// Forked from original source at
+//     http://roksbox.com/downloads/download.php?download_file=videoxml.php
+//
+// ChangeLog
+//
+// 2013-03-31
+//  * Added file caching to improve performance on large libraries
+//----------------------------------------------------------------------
 
-function getDirectory( $path = '.'){
+$tree=array();
+$cache_file = "video_cache.xml";
+$cache_ttl = 3600;
+
+function getDirectory($path = '.'){
 
     $ignore = array( 'cgi-bin', '.', '..' );
     // Directories to ignore when listing output. Many hosts
@@ -15,22 +27,22 @@ function getDirectory( $path = '.'){
     $temp=array();
 
     while( false !== ( $file = readdir( $dh ) ) ){
-    // Loop through the directory
+        // Loop through the directory
 
         if( !in_array( $file, $ignore ) ){
-        // Check that this file is not to be ignored
+            // Check that this file is not to be ignored
 
             // Feed with file name
             $temp[$j]['name']=$path . "/" . $file;
 
             if( is_dir( "$path/$file" ) ){
-            // Its a directory, so we need to keep reading down...
-               $temp[$j]['children']=getDirectory( "$path/$file");
+                // Its a directory, so we need to keep reading down...
+                $temp[$j]['children']=getDirectory( "$path/$file");
             }
 
         }
 
-       $j++; //counting
+        $j++; //counting
 
     }
     return $temp;
@@ -45,10 +57,10 @@ function getSort(&$temp) {
     global $type;
 
     switch ($type) {
-        case 'desc':
+    case 'desc':
         rsort($temp);
         break;
-        case 'asc':
+    case 'asc':
         sort($temp);
         break;
     }
@@ -110,10 +122,10 @@ function getInfo($filename, $xmltype) {
 
 }
 
-function parse_tree($tree) {
+function parse_tree($tree, $cache_file) {
     foreach ($tree as $path) {
         if (is_array($path)) {
-            parse_tree($path);
+            parse_tree($path, $cache_file);
         }
         else {
             if( is_file( $path ) ){
@@ -159,7 +171,8 @@ function parse_tree($tree) {
                     if ($genres == null) {
                         $genres = "[" . $path_parts['dirname'] . "]";
                     }
-echo <<<END
+
+                    $movie_xml = <<<END
 
   <movie>
     <origtitle>$title</origtitle>
@@ -169,31 +182,64 @@ echo <<<END
     <xmlhref>$xmlfile</xmlhref>
   </movie>
 END;
+                    write_cache($cache_file, $movie_xml);
                 }
             }
         }
     }
 }
 
-//Put the file directory system in an array first...
-$tree=getDirectory(".");
+function check_cache($cache_file, $cache_ttl) {
+    $fmtime = 0;
 
-$type='asc'; //set sorting type 'desc' or 'asc'
+    if (file_exists($cache_file)) {
+        $fmtime = filemtime($cache_file);
+        if (time() - $fmtime > $cache_ttl) {
+            unlink($cache_file);
+            $fmtime = 0;
+        }
+    }
 
-//Go through arrays again for sorting...now we have new sorted array $tree...
-getSort($tree);
+    return $fmtime;
+}
 
-?>
-<?php
-echo <<<END
+function read_cache($cache_file) {
+    return file_get_contents($cache_file);
+}
+
+function write_cache($cache_file, $contents) {
+    file_put_contents($cache_file, $contents, FILE_APPEND);
+}
+
+$file_modified_time = check_cache($cache_file, $cache_ttl);
+if (!$file_modified_time) {
+    //Put the file directory system in an array first...
+    $tree=getDirectory(".");
+
+    $type='asc'; //set sorting type 'desc' or 'asc'
+
+    //Go through arrays again for sorting...now we have new sorted array $tree...
+    getSort($tree);
+
+    $open_xml = <<<END
 <xml>
 <viddb>
 END;
-parse_tree($tree);
-echo <<<END
+    write_cache($cache_file, $open_xml);
+
+    parse_tree($tree, $cache_file);
+
+    $end_xml = <<<END
 
 </viddb>
 </xml>
 END;
-?>
+    write_cache($cache_file, $end_xml);
+}
+
+header("Content-type: text/xml");
+header("Pragma: cache");
+header("Cache-Control: max-age=$cache_ttl");
+header("Expires: " . gmdate('D, d M Y H:i:s \G\M\T', $file_modified_time + $cache_ttl));
+echo read_cache($cache_file);
 
