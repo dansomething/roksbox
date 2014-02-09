@@ -13,7 +13,7 @@ $tree=array();
 $cache_file = "video_cache.xml";
 $cache_ttl = 3600;
 
-function getDirectory($path = '.'){
+function getDirectory($path = '.') {
 
     $ignore = array( 'cgi-bin', '.', '..' );
     // Directories to ignore when listing output. Many hosts
@@ -26,7 +26,7 @@ function getDirectory($path = '.'){
     $j=0;
     $temp=array();
 
-    while( false !== ( $file = readdir( $dh ) ) ){
+    while( false !== ( $file = readdir( $dh ) ) ) {
         // Loop through the directory
 
         if( !in_array( $file, $ignore ) ){
@@ -211,8 +211,16 @@ function write_cache($cache_file, $contents) {
     file_put_contents($cache_file, $contents, FILE_APPEND);
 }
 
+function delete_cache($cache_file) {
+    if (file_exists($cache_file)) {
+      unlink($cache_file);
+    }
+}
+
 $file_modified_time = check_cache($cache_file, $cache_ttl);
 if (!$file_modified_time) {
+    delete_cache($cache_file);
+
     //Put the file directory system in an array first...
     $tree=getDirectory(".");
 
